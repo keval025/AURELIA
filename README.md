@@ -4,6 +4,8 @@ A single-page marketing and ordering site for AURELIA, a fictional neighborhood 
 
 Premium specialty coffee, seasonal plates, and quiet moments in the heart of the city.
 
+**Live demo:** [aurelia-coffee-house-mu.vercel.app](https://aurelia-coffee-house-mu.vercel.app)
+
 ## Features
 
 - **Hero + story sections** — full-bleed imagery, serif display type, and an editorial layout.
@@ -96,4 +98,4 @@ Swap the files in `public/images/` or point the `images` map in `app/page.tsx` a
 
 ## Deploying
 
-The project deploys to [Vercel](https://vercel.com) with no additional configuration — import the repository and accept the detected Next.js defaults. Any host that supports a Node.js Next.js server works with `pnpm build && pnpm start`.
+Live at **https://aurelia-coffee-house-mu.vercel.app**, deployed on [Vercel](https://vercel.com) with no additional configuration. Any host that supports a Node.js Next.js server also works with `pnpm build && pnpm start`.
