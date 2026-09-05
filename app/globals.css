@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
@@ -7,7 +7,7 @@
 
 @theme inline {
   --font-sans: 'Inter', system-ui, sans-serif;
-  --font-serif: 'Crimson Text', Georgia, serif;
+  --font-serif: 'Cormorant Garamond', 'Crimson Text', Georgia, serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +27,7 @@
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -50,83 +51,152 @@
 
 :root {
   color-scheme: light;
-  --background: #faf8f6;
-  --foreground: #150f0c;
-  --secondary: #f5f0e8;
-  --secondary-foreground: #150f0c;
-  --muted: #e8ddd2;
-  --muted-foreground: #756b5f;
-  --accent: #d4802b;
-  --accent-foreground: #faf8f6;
-  --border: #e8ddd2;
-  --input: #e8ddd2;
-  --ring: #d4802b;
-  --card: #faf8f6;
-  --card-foreground: #150f0c;
-  --popover: #faf8f6;
-  --popover-foreground: #150f0c;
-  --primary: #150f0c;
-  --primary-foreground: #faf8f6;
+
+  /* Boutique palette — warm ivory, espresso charcoal, muted brass/gold accent */
+  --background: #faf7f2;
+  --foreground: #1c1512;
+  --secondary: #f2e9db;
+  --secondary-foreground: #1c1512;
+  --muted: #e7dac6;
+  --muted-foreground: #6e6255;
+  --accent: #a9843d;
+  --accent-deep: #82631f;
+  --accent-foreground: #1c1512;
+  --border: #e3d5c0;
+  --input: #e3d5c0;
+  --ring: #a9843d;
+  --card: #fefcf9;
+  --card-foreground: #1c1512;
+  --popover: #fefcf9;
+  --popover-foreground: #1c1512;
+  --primary: #1c1512;
+  --primary-foreground: #faf7f2;
   --destructive: oklch(0.577 0.245 27.325);
-  --chart-1: #d4802b;
+  --chart-1: #a9843d;
   --chart-2: #8b6f47;
-  --chart-3: #756b5f;
-  --chart-4: #5a4d41;
-  --chart-5: #3d302a;
-  --radius: 0.5rem;
-  --sidebar: #faf8f6;
-  --sidebar-foreground: #150f0c;
-  --sidebar-primary: #150f0c;
-  --sidebar-primary-foreground: #faf8f6;
-  --sidebar-accent: #d4802b;
-  --sidebar-accent-foreground: #faf8f6;
-  --sidebar-border: #e8ddd2;
-  --sidebar-ring: #d4802b;
+  --chart-3: #6e6255;
+  --chart-4: #4a3d33;
+  --chart-5: #2f2620;
+  --radius: 0.85rem;
+  --sidebar: #faf7f2;
+  --sidebar-foreground: #1c1512;
+  --sidebar-primary: #1c1512;
+  --sidebar-primary-foreground: #faf7f2;
+  --sidebar-accent: #a9843d;
+  --sidebar-accent-foreground: #1c1512;
+  --sidebar-border: #e3d5c0;
+  --sidebar-ring: #a9843d;
+
+  /* Warm, espresso-tinted shadow scale — never pure black */
+  --shadow-color: 28 21 16;
+  --shadow-soft-sm: 0 1px 2px rgb(var(--shadow-color) / 0.06), 0 6px 16px -8px rgb(var(--shadow-color) / 0.16);
+  --shadow-soft: 0 2px 4px rgb(var(--shadow-color) / 0.05), 0 18px 40px -18px rgb(var(--shadow-color) / 0.22);
+  --shadow-soft-lg: 0 8px 16px rgb(var(--shadow-color) / 0.08), 0 40px 80px -28px rgb(var(--shadow-color) / 0.35);
+}
+
+/* Warm-tinted soft-shadow utilities (registered so they can be @apply'd with variants) */
+@utility shadow-soft-sm {
+  box-shadow: var(--shadow-soft-sm);
+}
+
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+@utility shadow-soft-lg {
+  box-shadow: var(--shadow-soft-lg);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   html {
-    @apply bg-background;
+    @apply bg-background scroll-smooth;
   }
+
   body {
     @apply bg-background text-foreground font-sans;
   }
-  
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
   .font-serif {
     @apply font-serif;
   }
 
+  /* ---- Typography ---- */
+
   .eyebrow {
-    @apply text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold;
+    @apply text-xs uppercase tracking-[0.24em] text-muted-foreground font-semibold;
   }
 
   .section-title {
-    @apply font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.05em];
+    @apply font-serif text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-[-0.02em];
   }
 
+  /* ---- Buttons ---- */
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-foreground text-background shadow-soft hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground hover:shadow-soft-lg active:translate-y-0;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-accent text-accent-foreground shadow-soft hover:-translate-y-0.5 hover:bg-accent-deep hover:text-background hover:shadow-soft-lg active:translate-y-0;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background border border-foreground/25 bg-transparent text-foreground hover:-translate-y-0.5 hover:border-foreground hover:bg-foreground hover:text-background active:translate-y-0;
+  }
+
+  .btn-outline-invert {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background border border-white/40 bg-transparent text-white hover:-translate-y-0.5 hover:border-white hover:bg-white hover:text-foreground active:translate-y-0;
+  }
+
+  /* ---- Nav links with animated underline ---- */
+
+  .nav-link {
+    @apply relative py-1 transition-colors duration-300 after:absolute after:-bottom-0.5 after:left-0 after:h-px after:w-0 after:bg-current after:transition-all after:duration-300 hover:after:w-full;
+  }
+
+  /* ---- Surfaces ---- */
+
+  .card-surface {
+    @apply rounded-3xl bg-card shadow-soft transition-all duration-500 ease-out hover:-translate-y-1.5 hover:shadow-soft-lg;
+  }
+
+  .img-frame {
+    @apply overflow-hidden rounded-3xl;
+  }
+
+  /* ---- Fields ---- */
+
   .field-label {
-    @apply flex flex-col gap-2.5 text-xs uppercase tracking-[0.12em] font-semibold;
+    @apply flex flex-col gap-2.5 text-xs uppercase tracking-[0.14em] font-semibold text-foreground/80;
   }
 
   .field-input {
-    @apply w-full border-b border-foreground/20 bg-transparent pb-3 text-base outline-none placeholder:text-foreground/40 focus:border-accent;
+    @apply w-full rounded-xl border border-foreground/15 bg-card/60 px-4 pb-3 pt-3 text-base outline-none transition-colors duration-200 placeholder:text-foreground/35 focus:border-accent focus:ring-2 focus:ring-accent/20;
   }
 
-  input[type="date"],
-  input[type="time"],
+  input[type='date'],
+  input[type='time'],
   select {
     width: 100%;
-    border-bottom: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
-    background: transparent;
-    padding-bottom: 0.75rem;
+    border-radius: var(--radius-xl);
+    border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+    background: color-mix(in srgb, var(--card) 60%, transparent);
+    padding: 0.75rem 1rem;
     outline: none;
-  } 
+    transition: border-color 0.2s ease;
+  }
 
-  input[type="date"]:focus,
-  input[type="time"]:focus,
+  input[type='date']:focus,
+  input[type='time']:focus,
   select:focus {
     border-color: var(--accent);
   }
@@ -137,5 +207,28 @@
 
   img {
     @apply aspect-auto;
+  }
+
+  /* ---- Fade-in-on-scroll reveal ---- */
+
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  [data-reveal='true'] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-reveal] {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
 }
