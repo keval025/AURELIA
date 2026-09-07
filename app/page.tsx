@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   Sparkles,
   Star,
+  Trash2,
   X,
 } from 'lucide-react'
 import { Reveal } from '@/components/reveal'
@@ -105,12 +106,16 @@ const products = [
 ]
 const categories = ['All', 'Coffee', 'Tea', 'Breakfast', 'Bakery', 'Desserts']
 type Product = (typeof products)[number]
+type CartItem = Product & { quantity: number }
+
+const TAX_RATE = 0.0875
 
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState('All')
   const [favorites, setFavorites] = useState<string[]>([])
-  const [cart, setCart] = useState<Product[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
+  const [orderPlaced, setOrderPlaced] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [reservationSent, setReservationSent] = useState(false)
   const [subscribed, setSubscribed] = useState(false)
@@ -136,11 +141,42 @@ export default function Home() {
   )
 
   const addToCart = (product: Product) => {
-    setCart((current) => [...current, product])
+    setCart((current) =>
+      current.some((item) => item.name === product.name)
+        ? current.map((item) =>
+            item.name === product.name ? { ...item, quantity: item.quantity + 1 } : item,
+          )
+        : [...current, { ...product, quantity: 1 }],
+    )
+    setOrderPlaced(false)
     setCartOpen(true)
+  }
+
+  const changeQuantity = (name: string, delta: number) => {
+    setCart((current) =>
+      current.flatMap((item) => {
+        if (item.name !== name) return [item]
+        const quantity = item.quantity + delta
+        return quantity < 1 ? [] : [{ ...item, quantity }]
+      }),
+    )
+    setOrderPlaced(false)
+  }
+
+  const removeFromCart = (name: string) => {
+    setCart((current) => current.filter((item) => item.name !== name))
+    setOrderPlaced(false)
   }
   const toggleFavorite = (name: string) =>
     setFavorites((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]))
+
+  const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart])
+  const subtotal = useMemo(
+    () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [cart],
+  )
+  const tax = subtotal * TAX_RATE
+  const total = subtotal + tax
 
   const headerTone = scrolled ? 'text-foreground' : 'text-white'
 
@@ -172,12 +208,12 @@ export default function Home() {
                   ? 'border-foreground/20 hover:bg-foreground hover:text-background'
                   : 'border-white/40 hover:bg-white hover:text-foreground'
               }`}
-              aria-label={`Open order, ${cart.length} items`}
+              aria-label={`Open order, ${cartCount} items`}
             >
               <ShoppingBag size={17} />
-              {cart.length > 0 && (
+              {cartCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-accent text-[9px] text-accent-foreground">
-                  {cart.length}
+                  {cartCount}
                 </span>
               )}
             </button>
@@ -589,7 +625,7 @@ export default function Home() {
               <div>
                 <p className="eyebrow">Your order</p>
                 <h2 className="font-serif text-3xl">
-                  The bag <span className="text-muted-foreground">({cart.length})</span>
+                  The bag <span className="text-muted-foreground">({cartCount})</span>
                 </h2>
               </div>
               <button
@@ -609,22 +645,39 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-5">
-                  {cart.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex gap-4">
+                  {cart.map((item) => (
+                    <div key={item.name} className="flex gap-4">
                       <img src={item.image} alt="" className="img-frame size-20 shrink-0 object-cover" />
                       <div className="flex-1">
                         <div className="flex justify-between gap-3">
                           <p className="font-serif text-lg">{item.name}</p>
-                          <span className="text-sm">${item.price.toFixed(2)}</span>
+                          <span className="text-sm">${(item.price * item.quantity).toFixed(2)}</span>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">Regular &middot; Made to order</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          ${item.price.toFixed(2)} each &middot; Made to order
+                        </p>
                         <div className="mt-3 flex items-center gap-3 text-xs">
-                          <button className="rounded-full border border-border p-1 transition-colors hover:bg-muted" aria-label="Decrease quantity">
+                          <button
+                            onClick={() => changeQuantity(item.name, -1)}
+                            className="rounded-full border border-border p-1 transition-colors hover:bg-muted"
+                            aria-label={`Decrease quantity of ${item.name}`}
+                          >
                             <Minus size={12} />
                           </button>
-                          <span>1</span>
-                          <button className="rounded-full border border-border p-1 transition-colors hover:bg-muted" aria-label="Increase quantity">
+                          <span aria-live="polite">{item.quantity}</span>
+                          <button
+                            onClick={() => changeQuantity(item.name, 1)}
+                            className="rounded-full border border-border p-1 transition-colors hover:bg-muted"
+                            aria-label={`Increase quantity of ${item.name}`}
+                          >
                             <Plus size={12} />
+                          </button>
+                          <button
+                            onClick={() => removeFromCart(item.name)}
+                            className="ml-auto rounded-full border border-border p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            aria-label={`Remove ${item.name} from bag`}
+                          >
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </div>
@@ -637,11 +690,36 @@ export default function Home() {
               <div className="border-t border-border pt-5">
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
-                  <span>${cart.reduce((sum, item) => sum + item.price, 0).toFixed(2)}</span>
+                  <span>${subtotal.toFixed(2)}</span>
                 </div>
-                <button className="btn-primary mt-5 w-full">
-                  Continue to checkout <ArrowRight size={15} />
+                <div className="mt-2 flex justify-between text-sm text-muted-foreground">
+                  <span>Tax ({(TAX_RATE * 100).toFixed(2)}%)</span>
+                  <span>${tax.toFixed(2)}</span>
+                </div>
+                <div className="mt-3 flex justify-between border-t border-border pt-3 text-sm font-semibold">
+                  <span>Total</span>
+                  <span>${total.toFixed(2)}</span>
+                </div>
+                <button
+                  onClick={() => setOrderPlaced(true)}
+                  disabled={orderPlaced}
+                  className="btn-primary mt-5 w-full"
+                >
+                  {orderPlaced ? (
+                    <>
+                      <Check size={15} /> Order placed
+                    </>
+                  ) : (
+                    <>
+                      Continue to checkout <ArrowRight size={15} />
+                    </>
+                  )}
                 </button>
+                {orderPlaced && (
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    Demo only &mdash; no payment was taken.
+                  </p>
+                )}
               </div>
             )}
           </aside>
