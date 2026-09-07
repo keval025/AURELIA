@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
   ArrowRight,
   Check,
   ChevronDown,
   Clock,
   Heart,
+  Loader2,
   Mail,
   Menu,
   MapPin,
@@ -110,6 +112,100 @@ type CartItem = Product & { quantity: number }
 
 const TAX_RATE = 0.0875
 
+const CART_STORAGE_KEY = 'aurelia-cart'
+const FAVORITES_STORAGE_KEY = 'aurelia-favorites'
+
+/**
+ * Web3Forms access key. Referenced statically so Next can inline it at build
+ * time; when it is unset both forms fall back to a local-only success state.
+ */
+const WEB3FORMS_KEY = process.env.NEXT_PUBLIC_WEB3FORMS_KEY
+const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit'
+
+const EMAIL_PATTERN = /^[^s@]+@[^s@]+.[^s@]+$/
+const OPENING_TIME = '07:00'
+const CLOSING_TIME = '21:00'
+
+type StoredCartEntry = { name: string; quantity: number }
+type FormStatus = 'idle' | 'sending' | 'sent' | 'error'
+
+/** Local date as YYYY-MM-DD. Never derived on the server: this page is
+ *  statically prerendered, so a build-time date would be stale on the client. */
+function localToday() {
+  const now = new Date()
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+function readStored<T>(key: string, isValid: (value: unknown) => value is T): T | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    return isValid(parsed) ? parsed : null
+  } catch {
+    // Malformed JSON or blocked storage: fall back to a clean slate.
+    return null
+  }
+}
+
+function writeStored(key: string, value: unknown) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Quota exceeded or private mode. Persistence is best effort.
+  }
+}
+
+const isStoredCart = (value: unknown): value is StoredCartEntry[] =>
+  Array.isArray(value) &&
+  value.every(
+    (entry) =>
+      !!entry &&
+      typeof entry === 'object' &&
+      typeof (entry as StoredCartEntry).name === 'string' &&
+      Number.isFinite((entry as StoredCartEntry).quantity) &&
+      (entry as StoredCartEntry).quantity > 0,
+  )
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+
+/** POSTs to Web3Forms. Resolves immediately when no key is configured so the
+ *  demo keeps working without an account. */
+async function sendToFormService(payload: Record<string, unknown>) {
+  if (!WEB3FORMS_KEY) return
+  const response = await fetch(WEB3FORMS_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ access_key: WEB3FORMS_KEY, ...payload }),
+  })
+  const result = await response.json().catch(() => null)
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.message ?? 'Submission failed')
+  }
+}
+
+const RESERVATION_FIELDS = [
+  { key: 'name', label: 'Name', type: 'text' },
+  { key: 'email', label: 'Email', type: 'email' },
+  { key: 'date', label: 'Date', type: 'date' },
+  { key: 'time', label: 'Time', type: 'time' },
+] as const
+
+type ReservationField = (typeof RESERVATION_FIELDS)[number]['key']
+type ReservationForm = Record<ReservationField | 'guests' | 'request', string>
+
+const EMPTY_RESERVATION: ReservationForm = {
+  name: '',
+  email: '',
+  date: '',
+  time: '',
+  guests: '2 guests',
+  request: '',
+}
+
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState('All')
   const [favorites, setFavorites] = useState<string[]>([])
@@ -117,8 +213,14 @@ export default function Home() {
   const [cartOpen, setCartOpen] = useState(false)
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [reservationSent, setReservationSent] = useState(false)
-  const [subscribed, setSubscribed] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+  const [today, setToday] = useState('')
+  const [reservation, setReservation] = useState<ReservationForm>(EMPTY_RESERVATION)
+  const [reservationErrors, setReservationErrors] = useState<Partial<ReservationForm>>({})
+  const [reservationStatus, setReservationStatus] = useState<FormStatus>('idle')
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [subscribeStatus, setSubscribeStatus] = useState<FormStatus>('idle')
   const [search, setSearch] = useState('')
   const [scrolled, setScrolled] = useState(false)
 
@@ -128,6 +230,52 @@ export default function Home() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  // Restore persisted state on mount only, never during render (SSR safety).
+  useEffect(() => {
+    const storedCart = readStored(CART_STORAGE_KEY, isStoredCart)
+    if (storedCart) {
+      // Rebuild from the current product list so stale prices can't persist.
+      setCart(
+        storedCart.flatMap((entry) => {
+          const product = products.find((item) => item.name === entry.name)
+          return product ? [{ ...product, quantity: Math.floor(entry.quantity) }] : []
+        }),
+      )
+    }
+    const storedFavorites = readStored(FAVORITES_STORAGE_KEY, isStringArray)
+    if (storedFavorites) {
+      setFavorites(storedFavorites.filter((name) => products.some((item) => item.name === name)))
+    }
+    setToday(localToday())
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    writeStored(
+      CART_STORAGE_KEY,
+      cart.map(({ name, quantity }) => ({ name, quantity })),
+    )
+  }, [cart, hydrated])
+
+  useEffect(() => {
+    if (!hydrated) return
+    writeStored(FAVORITES_STORAGE_KEY, favorites)
+  }, [favorites, hydrated])
+
+  // Let both forms be reused after a successful send.
+  useEffect(() => {
+    if (reservationStatus !== 'sent') return
+    const timer = window.setTimeout(() => setReservationStatus('idle'), 4000)
+    return () => window.clearTimeout(timer)
+  }, [reservationStatus])
+
+  useEffect(() => {
+    if (subscribeStatus !== 'sent') return
+    const timer = window.setTimeout(() => setSubscribeStatus('idle'), 4000)
+    return () => window.clearTimeout(timer)
+  }, [subscribeStatus])
 
   const featuredProducts = useMemo(() => products.filter((product) => product.featured), [])
   const filteredProducts = useMemo(
@@ -169,6 +317,81 @@ export default function Home() {
   }
   const toggleFavorite = (name: string) =>
     setFavorites((current) => (current.includes(name) ? current.filter((item) => item !== name) : [...current, name]))
+
+  const updateReservation = (key: keyof ReservationForm, value: string) => {
+    setReservation((current) => ({ ...current, [key]: value }))
+    setReservationErrors((current) => ({ ...current, [key]: undefined }))
+    setReservationStatus('idle')
+  }
+
+  const validateReservation = (values: ReservationForm) => {
+    const errors: Partial<ReservationForm> = {}
+    if (values.name.trim().length < 2) errors.name = 'Please tell us your name.'
+    if (!EMAIL_PATTERN.test(values.email.trim())) errors.email = 'Enter a valid email address.'
+    if (!values.date) errors.date = 'Choose a date.'
+    else if (values.date < localToday()) errors.date = 'Please choose a future date.'
+    if (!values.time) errors.time = 'Choose a time.'
+    else if (values.time < OPENING_TIME || values.time > CLOSING_TIME) {
+      errors.time = 'We are open 07:00 - 21:00.'
+    } else if (values.date === localToday() && values.time <= new Date().toTimeString().slice(0, 5)) {
+      errors.time = 'That time has already passed today.'
+    }
+    return errors
+  }
+
+  const submitReservation = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const errors = validateReservation(reservation)
+    setReservationErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      setReservationStatus('idle')
+      return
+    }
+    setReservationStatus('sending')
+    try {
+      await sendToFormService({
+        subject: 'New AURELIA table reservation',
+        from_name: 'AURELIA Coffee House',
+        form: 'Reservation',
+        name: reservation.name.trim(),
+        email: reservation.email.trim(),
+        date: reservation.date,
+        time: reservation.time,
+        guests: reservation.guests,
+        special_request: reservation.request.trim() || 'None',
+      })
+      setReservation(EMPTY_RESERVATION)
+      setReservationStatus('sent')
+    } catch {
+      setReservationStatus('error')
+    }
+  }
+
+  const submitSubscribe = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      setEmailError('Enter a valid email address.')
+      setSubscribeStatus('idle')
+      return
+    }
+    setEmailError('')
+    setSubscribeStatus('sending')
+    try {
+      await sendToFormService({
+        subject: 'New AURELIA newsletter signup',
+        from_name: 'AURELIA Coffee House',
+        form: 'Newsletter',
+        email: email.trim(),
+      })
+      setEmail('')
+      setSubscribeStatus('sent')
+    } catch {
+      setSubscribeStatus('error')
+    }
+  }
+
+  const fieldClass = (error?: string) =>
+    error ? 'field-input border-destructive focus:border-destructive focus:ring-destructive/20' : 'field-input'
 
   const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart])
   const subtotal = useMemo(
@@ -501,25 +724,32 @@ export default function Home() {
             </div>
           </div>
           <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              setReservationSent(true)
-            }}
+            noValidate
+            onSubmit={submitReservation}
             className="card-surface grid gap-6 p-7 sm:grid-cols-2 sm:p-9"
           >
-            {['Name', 'Email', 'Date', 'Time'].map((label) => (
-              <label key={label} className="field-label">
+            {RESERVATION_FIELDS.map(({ key, label, type }) => (
+              <label key={key} className="field-label">
                 {label}
                 <input
-                  required
-                  type={label === 'Email' ? 'email' : label === 'Date' ? 'date' : label === 'Time' ? 'time' : 'text'}
-                  className="field-input"
+                  type={type}
+                  value={reservation[key]}
+                  onChange={(e) => updateReservation(key, e.target.value)}
+                  min={type === 'date' ? today || undefined : type === 'time' ? OPENING_TIME : undefined}
+                  max={type === 'time' ? CLOSING_TIME : undefined}
+                  aria-invalid={Boolean(reservationErrors[key])}
+                  className={fieldClass(reservationErrors[key])}
                 />
+                {reservationErrors[key] ? <FieldError message={reservationErrors[key]!} /> : null}
               </label>
             ))}
             <label className="field-label relative">
               Guests
-              <select className="field-input appearance-none">
+              <select
+                value={reservation.guests}
+                onChange={(e) => updateReservation('guests', e.target.value)}
+                className="field-input appearance-none"
+              >
                 <option>2 guests</option>
                 <option>3 guests</option>
                 <option>4 guests</option>
@@ -529,10 +759,23 @@ export default function Home() {
             </label>
             <label className="field-label">
               Special request
-              <input className="field-input" placeholder="Optional" />
+              <input
+                value={reservation.request}
+                onChange={(e) => updateReservation('request', e.target.value)}
+                className="field-input"
+                placeholder="Optional"
+              />
             </label>
-            <button className="btn-primary sm:col-span-2">
-              {reservationSent ? (
+            <button
+              type="submit"
+              disabled={reservationStatus === 'sending'}
+              className="btn-primary sm:col-span-2 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {reservationStatus === 'sending' ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" /> Sending
+                </>
+              ) : reservationStatus === 'sent' ? (
                 <>
                   <Check size={15} /> Request received
                 </>
@@ -540,6 +783,13 @@ export default function Home() {
                 'Reserve your table'
               )}
             </button>
+            <p className="text-xs leading-5 text-muted-foreground sm:col-span-2" role="status">
+              {reservationStatus === 'error'
+                ? 'Something went wrong sending your request. Please try again or call us.'
+                : reservationStatus === 'sent'
+                  ? 'Thank you. We will confirm your table by email shortly.'
+                  : 'We hold tables for 15 minutes past the booking time.'}
+            </p>
           </form>
         </div>
       </Reveal>
@@ -556,22 +806,55 @@ export default function Home() {
           Seasonal menus, new beans, and good things worth knowing.
         </p>
         <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            setSubscribed(true)
-          }}
+          noValidate
+          onSubmit={submitSubscribe}
           className="mx-auto mt-8 flex max-w-md items-center gap-3 rounded-full border border-accent-foreground/30 bg-accent-foreground/5 px-5 py-2.5"
         >
           <input
-            required
             type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              setEmailError('')
+              setSubscribeStatus('idle')
+            }}
+            aria-invalid={Boolean(emailError)}
+            aria-label="Email address"
             placeholder="Your email address"
             className="w-full bg-transparent text-sm outline-none placeholder:text-accent-foreground/60"
           />
-          <button className="shrink-0 whitespace-nowrap rounded-full bg-accent-foreground px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-accent transition-all duration-300 hover:-translate-y-0.5">
-            {subscribed ? 'Thank you' : 'Subscribe'}
+          <button
+            type="submit"
+            disabled={subscribeStatus === 'sending'}
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-accent-foreground px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-accent transition-all duration-300 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {subscribeStatus === 'sending' ? (
+              <>
+                <Loader2 size={13} className="animate-spin" /> Sending
+              </>
+            ) : subscribeStatus === 'sent' ? (
+              'Thank you'
+            ) : (
+              'Subscribe'
+            )}
           </button>
         </form>
+        <p
+          className="mx-auto mt-4 flex min-h-5 max-w-md items-center justify-center gap-1.5 text-xs text-accent-foreground/80"
+          role="status"
+        >
+          {emailError ? (
+            <>
+              <AlertCircle size={13} /> {emailError}
+            </>
+          ) : subscribeStatus === 'error' ? (
+            <>
+              <AlertCircle size={13} /> That did not send. Please try again.
+            </>
+          ) : subscribeStatus === 'sent' ? (
+            'You are on the list.'
+          ) : null}
+        </p>
       </Reveal>
 
       {/* ---------------------------------- Footer ---------------------------------- */}
@@ -726,6 +1009,14 @@ export default function Home() {
         </div>
       )}
     </main>
+  )
+}
+
+function FieldError({ message }: { message: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] font-medium normal-case tracking-normal text-destructive">
+      <AlertCircle size={12} /> {message}
+    </span>
   )
 }
 
